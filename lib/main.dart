@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:stopwatch/utils/utils.dart';
 import 'stopwatch/views/stopwatch_page.dart';
 
 void main() {
@@ -11,10 +12,14 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Stopwatch',
+      scrollBehavior: CustomScrollBehavior(),
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: Colors.black
       ),
       home: StopwatchPage(),
     );
   }
 }
+
