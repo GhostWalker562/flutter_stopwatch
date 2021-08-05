@@ -1,30 +1,65 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility that Flutter provides. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:stopwatch/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(MyApp());
+  testWidgets(
+    'Stopwatch start and stop after delay',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({}); //set values here
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+      // Build our app and trigger a frame.
+      await tester.pumpWidget(const MyApp());
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+      // Tap start
+      await tester.tap(find.text('Start'));
+      await tester.pump();
+      // Wait
+      await tester.pump(const Duration(milliseconds: 50));
+      // Tap stop
+      await tester.tap(find.text('Stop'));
+      await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
-  });
+      // We find two widgets because there is one for the display and one for laps.
+      expect(find.text('00:00.50'), findsNWidgets(2));
+    },
+  );
+
+  testWidgets(
+    'Stopwatch lap twice',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({}); //set values here
+
+      // Build our app and trigger a frame.
+      await tester.pumpWidget(const MyApp());
+
+      // Tap start
+      await tester.tap(find.text('Start'));
+      await tester.pump();
+      // Wait and tap lap 1
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.byKey(const ValueKey('lapResetButton')));
+      await tester.pump();
+      // Wait and tap lap 2
+      await tester.pump(const Duration(seconds: 2));
+      await tester.tap(find.byKey(const ValueKey('lapResetButton')));
+      await tester.pump();
+      // Tap stop after a delay
+      await tester.pump(const Duration(seconds: 3));
+      await tester.tap(find.text('Stop'));
+      await tester.pump();
+
+      // Find lap 1
+      expect(find.text('00:01.00'), findsOneWidget);
+      expect(find.text('Lap 1'), findsOneWidget);
+      // Find lap 2
+      expect(find.text('00:02.00'), findsOneWidget);
+      expect(find.text('Lap 2'), findsOneWidget);
+      // Find primary time
+      expect(find.text('00:03.00'), findsOneWidget);
+      expect(find.text('Lap 3'), findsOneWidget);
+    },
+  );
 }
