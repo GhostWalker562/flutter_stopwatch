@@ -9,7 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 class StopwatchProvider extends ChangeNotifier {
   //* Static values and constants
   static const Duration kTimerSpeed = Duration(milliseconds: 10);
-  static const String kPreviousDateTime = 'previousDateTime';
+  static const String kPreviousPrimaryDuration = 'previousPrimaryDuration';
+  static const String kPreviousLapDuration = 'previousLapDuration';
   static const String kPreviousLapTime = 'previousLapTime';
   static const String kPreviousTime = 'previousTime';
   static const String kPreviousLaps = 'previousLaps';
@@ -28,34 +29,28 @@ class StopwatchProvider extends ChangeNotifier {
   void _refreshSp() async {
     prefs = await SharedPreferences.getInstance();
     // retrieve values
-    String? previousDateTime = prefs.getString(kPreviousDateTime);
+    int? previousPrimaryDuration = prefs.getInt(kPreviousPrimaryDuration);
+    int? previousLapDuration = prefs.getInt(kPreviousLapDuration);
     String? previousLapTime = prefs.getString(kPreviousLapTime);
     String? previousTime = prefs.getString(kPreviousTime);
     List<String>? previousLaps = prefs.getStringList(kPreviousLaps);
-    bool? isRunning = prefs.getBool(kIsRunning);
     // If all values are available, then we proceed with refreshing the state.
-    if (previousDateTime != null &&
-        previousLapTime != null &&
-        previousTime != null &&
+    if (previousPrimaryDuration != null &&
+        previousLapDuration != null &&
         previousLaps != null) {
-      // We take the duration from when the app was detached and add it to the
-      // previous durations.
-      Duration dur =
-          DateTime.now().difference(DateTime.parse(previousDateTime));
+      // Refresh the laps.
+      for (String lap in previousLaps) {
+        laps.add(Duration(milliseconds: int.parse(lap)));
+      }
+      _lapDuration += Duration(milliseconds: previousLapDuration);
+      _primaryDuration += Duration(milliseconds: previousPrimaryDuration);
 
       // If the timer was running, we will continue to run the timer. Otherwise
       // we set dur to zero because we don't want to add the time.
-      if (isRunning ?? false) {
+      if (previousLapTime != null && previousTime != null) {
         runTimer();
-      } else {
-        dur = Duration.zero;
-      }
-
-      // Add the time and refresh the laps.
-      time = Duration(milliseconds: int.parse(previousTime)) + dur;
-      lapTime = Duration(milliseconds: int.parse(previousLapTime)) + dur;
-      for (String lap in previousLaps) {
-        laps.add(Duration(milliseconds: int.parse(lap)));
+        _lapTime = DateTime.parse(previousLapTime);
+        _startTime = DateTime.parse(previousTime);
       }
 
       notifyListeners();
@@ -65,16 +60,17 @@ class StopwatchProvider extends ChangeNotifier {
   /// Save all stopwatch values.
   void saveSp() async {
     // save dateTime
-    await prefs.setString(kPreviousDateTime, DateTime.now().toString());
+    await prefs.setInt(
+        kPreviousPrimaryDuration, _primaryDuration.inMilliseconds);
+    // save dateTime
+    await prefs.setInt(kPreviousLapDuration, _lapDuration.inMilliseconds);
     // save time
-    await prefs.setString(kPreviousTime, time.inMilliseconds.toString());
+    await prefs.setString(kPreviousTime, _startTime.toString());
     // save lap time
-    await prefs.setString(kPreviousLapTime, lapTime.inMilliseconds.toString());
+    await prefs.setString(kPreviousLapTime, _lapTime.toString());
     // save laps
     await prefs.setStringList(
         kPreviousLaps, laps.map((e) => e.inMilliseconds.toString()).toList());
-    // save isRunning
-    await prefs.setBool(kIsRunning, _timer?.isActive ?? false);
   }
 
   /// Clear all stopwatch values.
@@ -89,7 +85,14 @@ class StopwatchProvider extends ChangeNotifier {
 
   /// [Time] is the primary time of the stopwatch. [lapTime] is the secondary time
   /// that will reset whenever a lap is recoreded.
-  Duration time = Duration.zero, lapTime = Duration.zero;
+  DateTime? _startTime, _lapTime;
+  Duration _primaryDuration = Duration.zero, _lapDuration = Duration.zero;
+
+  Duration get time =>
+      _primaryDuration +
+      DateTime.now().difference(_startTime ?? DateTime.now());
+  Duration get lapTime =>
+      _lapDuration + DateTime.now().difference(_lapTime ?? DateTime.now());
 
   /// Laps recorded by the user.
   final List<Duration> laps = [];
@@ -117,30 +120,33 @@ class StopwatchProvider extends ChangeNotifier {
   /// Increment the [time] and [lapTime]. This will be called whenever [_timer] ticks.
   /// Will also save when the Platform is not iOS or Android so that it can support
   /// desktop because desktop has no detached state.
-  void _incrementTime(Timer timer) => notify(() {
-        time += kTimerSpeed;
-        lapTime += kTimerSpeed;
-        // I would check for iOS but I don't hardware to test it. Better safe
-        // than sorry.
-        if (!(Platform.isAndroid)) saveSp();
-      });
+  void _incrementTime(Timer timer) => notify();
 
   /// Start the timer.
   void runTimer() {
     _timer?.cancel();
     _timer = Timer.periodic(kTimerSpeed, _incrementTime);
+    _startTime ??= DateTime.now();
+    _lapTime ??= DateTime.now();
+    saveSp();
   }
 
   /// Stop the timer.
   void stopTimer() => notify(() {
         _timer?.cancel();
+        _primaryDuration = time;
+        _lapDuration = lapTime;
+        _startTime = null;
+        _lapTime = null;
         saveSp();
       });
 
   /// Reset the timer and clear Sp.
   void resetTimer() => notify(() {
-        time = Duration.zero;
-        lapTime = Duration.zero;
+        _startTime = null;
+        _lapTime = null;
+        _primaryDuration = Duration.zero;
+        _lapDuration = Duration.zero;
         laps.clear();
         resetSp();
       });
@@ -148,7 +154,8 @@ class StopwatchProvider extends ChangeNotifier {
   /// Record a lap into [laps] and reset [lapTime].
   void recordLap() => notify(() {
         laps.add(lapTime);
-        lapTime = Duration.zero;
+        _lapTime = DateTime.now();
+        _lapDuration = Duration.zero;
         saveSp();
       });
 
